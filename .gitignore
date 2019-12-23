@@ -1,0 +1,13 @@
+.DS_Store
+.idea/
+log/
+output/
+tmp/
+sync*
+*.pyc
+test_module/
+clean*
+noise_check*
+log_parser*
+config*.json
+.vscode/

@@ -1,0 +1,11 @@
+bitarray==0.8.3
+GPUtil==1.4.0
+numpy==1.16.2
+psutil==5.6.1
+pybloom-live==3.0.0
+scipy==1.2.1
+setproctitle==1.1.10
+torch==1.0.1.post2
+tqdm==4.31.1
+gensim==3.7.2
+
