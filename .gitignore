@@ -11,3 +11,5 @@ noise_check*
 log_parser*
 config*.json
 .vscode/
+
+data/
