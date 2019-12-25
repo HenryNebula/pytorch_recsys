@@ -10,7 +10,7 @@ def fast_topK(metric_array:np.ndarray, topK):
     return ranklist
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     arr = np.array(range(1000000))
-    print('finish generating')
+    print("finish generating")
     print(fast_topK(arr, 10))

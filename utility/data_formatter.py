@@ -11,7 +11,7 @@ def txt_to_dict(filename):
     dict_ = {}
     with open(filename) as f:
         for l in f:
-            num_list = list(map(int, l.strip().split(' ')))
+            num_list = list(map(int, l.strip().split(" ")))
             user = num_list[0]
             items = num_list[1:]
             if user in dict_:
@@ -23,16 +23,16 @@ def txt_to_dict(filename):
     return dict_
 
 
-def load_single_file(data_dir='ml-20m-context'):
-    file_prefix = './raw_dataset/{}/'.format(data_dir)
-    merged_dict_ = txt_to_dict(file_prefix + 'data.dat')
+def load_single_file(data_dir="ml-20m-context"):
+    file_prefix = "./raw_dataset/{}/".format(data_dir)
+    merged_dict_ = txt_to_dict(file_prefix + "data.dat")
     return merged_dict_
 
 
-def merge_file(data_dir='yelp2018'):
-    file_prefix = './raw_dataset/{}/'.format(data_dir)
-    train_dict = txt_to_dict(file_prefix + 'train.dat')
-    test_dict = txt_to_dict(file_prefix + 'test.dat')
+def merge_file(data_dir="yelp2018"):
+    file_prefix = "./raw_dataset/{}/".format(data_dir)
+    train_dict = txt_to_dict(file_prefix + "train.dat")
+    test_dict = txt_to_dict(file_prefix + "test.dat")
 
     # merge and delete repeat ones
     for user in train_dict:
@@ -54,12 +54,12 @@ def re_index(merged_dict):
             item_set.add(item)
 
     if check_compact_set(user_set) and check_compact_set(item_set):
-        print('compact sets checked!')
+        print("compact sets checked!")
         reindexed_dict = merged_dict
-        reindexed_dict['num_user'] = len(user_set)
-        reindexed_dict['num_item'] = len(item_set)
+        reindexed_dict["num_user"] = len(user_set)
+        reindexed_dict["num_item"] = len(item_set)
     else:
-        print('need formatting')
+        print("need formatting")
         reindexed_dict = None
         exit(1)
     return reindexed_dict
@@ -74,18 +74,18 @@ def generate_neg(pos_sample):
         return np.random.choice(list(set(range(num_item)).difference({pos_sample})), size=2 * num_neg, replace=False)
 
 
-def split(reindexed_dict, dname, num_neg, split_mode='leave_one_out', thresh=0):
+def split(reindexed_dict, dname, num_neg, split_mode="leave_one_out", thresh=0):
     assert type(split_mode) == str
-    num_user, num_item = reindexed_dict['num_user'], reindexed_dict['num_item']
-    reindexed_dict.pop('num_user')
-    reindexed_dict.pop('num_item')
+    num_user, num_item = reindexed_dict["num_user"], reindexed_dict["num_item"]
+    reindexed_dict.pop("num_user")
+    reindexed_dict.pop("num_item")
 
     def save_file(dict_, fname):
-        with open(fname, 'w') as f:
+        with open(fname, "w") as f:
             for user in dict_:
                 for item in dict_[user]:
-                    f.write('{},{}\n'.format(user, item))
-        print('Finish writing {}'.format(fname))
+                    f.write("{},{}\n".format(user, item))
+        print("Finish writing {}".format(fname))
 
     if not reindexed_dict:
         print("No files created")
@@ -106,7 +106,7 @@ def split(reindexed_dict, dname, num_neg, split_mode='leave_one_out', thresh=0):
         np.random.shuffle(items)
         length = len(items)
 
-        if split_mode != 'leave_one_out':
+        if split_mode != "leave_one_out":
             # split ratio 6/2/2
             train_dict[user] = items[:int(length * 0.6) + 1]
             val_dict[user] = list(items[int(length * 0.6) + 1: int(length * 0.8) + 1])
@@ -130,16 +130,16 @@ def split(reindexed_dict, dname, num_neg, split_mode='leave_one_out', thresh=0):
                 test_dict[user] = [items[-1]]
                 test_neg_dict[user] = list(neg_samples[num_neg:])
 
-    full_dir = './{}/'.format(dname)
+    full_dir = "./{}/".format(dname)
     if not os.path.exists(full_dir):
         os.makedirs(full_dir)
 
-    save_file(train_dict, full_dir + 'train.dat')
-    save_file(test_dict, full_dir + 'test.dat')
-    save_file(test_neg_dict, full_dir + 'test.negative.dat')
-    save_file(val_dict, full_dir + 'val.dat')
-    save_file(val_neg_dict, full_dir + 'val.negative.dat')
-    print('finish writing split dataset: {}, Shape: User-{}, Item-{}'.format(
+    save_file(train_dict, full_dir + "train.dat")
+    save_file(test_dict, full_dir + "test.dat")
+    save_file(test_neg_dict, full_dir + "test.negative.dat")
+    save_file(val_dict, full_dir + "val.dat")
+    save_file(val_neg_dict, full_dir + "val.negative.dat")
+    print("finish writing split dataset: {}, Shape: User-{}, Item-{}".format(
         dname, num_user, num_item))
 
 
@@ -149,32 +149,32 @@ def generate_neg_for_test(dname, item_num):
 
     whole_item_set = set(range(item_num))
     neg_list = []
-    with open('./{}/test.dat'.format(dname)) as f:
+    with open("./{}/test.dat".format(dname)) as f:
         for line in f:
-            arr = map(lambda x: int(x), line.strip().split(','))
+            arr = map(lambda x: int(x), line.strip().split(","))
             neg_list.append(arr)
 
     neg_list = map(set_difference, neg_list)
 
-    with open('./{}/test.negative.dat'.format(dname), 'w') as f:
+    with open("./{}/test.negative.dat".format(dname), "w") as f:
         f.write("\n".join(neg_list))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # pool = Pool(5)
     if len(sys.argv) >= 2:
         name_list= [sys.argv[1]]
     else:
-        name_list = ['amazon-book', 'last-fm', 'ml-20m', 'yelp2018', 'ml-20m-context','ml-10m','app', 'yelp']
+        name_list = ["amazon-book", "last-fm", "ml-20m", "yelp2018", "ml-20m-context","ml-10m","app", "yelp"]
 
     file_path = os.path.dirname(__file__)
     os.chdir(os.path.join(file_path, "../data/"))
     num_neg = 99
 
     for idx, dataset_name in enumerate([name_list[-1]]):
-        print('Start dataset: {}'.format(dataset_name))
+        print("Start dataset: {}".format(dataset_name))
 
-        if dataset_name not in ['amazon-book', 'last-fm', 'ml-20m', 'yelp2018']:
+        if dataset_name not in ["amazon-book", "last-fm", "ml-20m", "yelp2018"]:
             merged_dict = load_single_file(dataset_name)
         else:
             merged_dict = merge_file(dataset_name)

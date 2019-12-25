@@ -3,7 +3,6 @@ from torch.utils.data import DataLoader
 import utility.utils as utils
 from utility.diary import Diary
 from utility.Logger import create_logger
-from dataloader.FakeDataset import FakeDataset
 
 from graph.MF import MF
 from graph.GMF import GMF
@@ -14,12 +13,8 @@ from graph.DoubleGMF import DoubleGMF
 from graph.SharedNeuMF import SharedNeuMF
 from graph.PMF import PMF
 from graph.CML import CML
-from graph.DMF_extension import DMF_A, DMF_B, DMF_C, DMF_D
 
 import json
-import GPUtil as gputil
-import torch.nn.parallel as parallel
-from torch.utils.data import distributed
 import os
 
 
@@ -47,24 +42,6 @@ class Trainer():
 
         # model parameters
         self.model, self.optimizer, self.lr_rate = self.load_model()
-
-    def assign_gpu(self):
-        # find optimal GPU
-        if self.args.gpu != -1:
-            gpu_list = gputil.getAvailable(
-                order='memory', limit=10, maxLoad=0.7, maxMemory=0.7, excludeID=[5])
-            if not gpu_list:
-                raise (Exception("NO Available GPU!"))
-
-            shell_gpu = self.args.gpu
-            if shell_gpu not in gpu_list:
-                shell_gpu = gpu_list[0]
-
-            os.environ['CUDA_VISIBLE_DEVICES'] = str(shell_gpu)
-            self.logger.debug("finish preparing gpu: ({} -> {})".format(self.args.gpu, shell_gpu))
-
-        else:
-            self.logger.debug("finishing preparing device as cpu")
 
     def get_generic_loader(self, dataset):
         # only use distributed version in mCore mode
@@ -168,13 +145,5 @@ class Trainer():
         if args.fix_right:
             optimizer = model.fix_right(optimizer)
 
-        if args.mCore:
-            model = parallel.DistributedDataParallelCPU(model)
-
         return model, optimizer, lr
-
-## report.
-# diary.report_last(type_='max')
-# hr, ndcg = test_evaluator.eval_once(model, 0, topK=args.topK)
-# print('epoch = {0}, loss={1:.4f}, lr = {2}, HR = {3:.3f}, NDCG = {4:.3f}'.format(0, -1, lr_rate, hr, ndcg))
 
