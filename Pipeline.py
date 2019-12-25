@@ -1,149 +1,123 @@
 from torch import optim
+import torch
 from torch.utils.data import DataLoader
 import utility.utils as utils
 from utility.diary import Diary
-from utility.Logger import create_logger
+from utility.logger import create_logger
 
-from graph.MF import MF
-from graph.GMF import GMF
-from graph.MLP import MLP
-from graph.NeuMF import NeuMF
-from graph.LadderGMF import LadderGMF
-from graph.DoubleGMF import DoubleGMF
-from graph.SharedNeuMF import SharedNeuMF
-from graph.PMF import PMF
-from graph.CML import CML
+from model.MF import MF
+from model.GMF import GMF
+from model.NeuMF import NeuMF
+from model.CML import CML
 
 import json
 import os
+import multiprocessing
+import numpy as np
 
 
-class Trainer():
+class Pipeline:
     def __init__(self, args):
 
         self.args = args
 
         # load logger
-        self.diary = Diary(os.path.join(args.output, args.make_diary), makedir=True) if args.make_diary else None
         self.logger = create_logger(os.path.join(args.output, args.log_name))
 
-        self.assign_gpu()
-
         # load generic config
-        with open(os.path.join(os.path.dirname(__file__), 'config_json', args.config)) as f:
+        with open(os.path.join(os.path.dirname(__file__), "config_json", args.config)) as f:
             self.config = json.loads(f.read())
 
         self.logger.debug("start loading dataset!")
+
         # dataset abstraction
-        self.trainloader, self.trainsampler, self.val_evaluator, self.test_evaluator, self.dataset = self.get_trainloader()
+        self.dataset = utils.load_dataset(self.config, args.dataset, args.num_neg, args.implicit)
+        self.train_dataloader = self.get_data_loader()
+
+        self.evaluator = self.dataset.get_evaluator()
+
         self.logger.debug("finish loading evaluators for both val and test phase")
 
-        self.fake_dataset = FakeDataset(self.dataset)
+        gpu_index = self.args.gpu
+
+        assert gpu_index <= torch.cuda.device_count() - 1, "Wrong GPU number {}".format(gpu_index)
+
+        self.device = torch.device("cpu") if gpu_index < 0 else torch.device("cuda: {}".format(gpu_index))
 
         # model parameters
-        self.model, self.optimizer, self.lr_rate = self.load_model()
+        self.model, self.optimizer, self.lr = self.load_model()
 
-    def get_generic_loader(self, dataset):
-        # only use distributed version in mCore mode
-        # different loader between CPU and GPU training
+    def get_data_loader(self):
+        # mini-batch or full-batch depends on the size of dataset
+        batch_size = self.args.batch_size
+        if batch_size > 0:
+            return DataLoader(self.dataset, batch_size=batch_size,
+                              shuffle=self.config["shuffle"],
+                              num_workers=multiprocessing.cpu_count(),
+                              drop_last=True)
 
-        args = self.args
-        if not args.mCore:
-            dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=self.config['shuffle'],
-                                     num_workers=8, drop_last=True)
-            sampler = None
         else:
-            sampler = distributed.DistributedSampler(dataset)
-            divided_bs = int(args.batch_size / args.world_size)
-            dataloader = DataLoader(dataset, batch_size=divided_bs, shuffle=self.config['shuffle'],
-                                     num_workers=4, drop_last=True, sampler=sampler, pin_memory=True)
-        return dataloader, sampler
+            return (self.update_full_batch_with_neg_samples() for _ in range(self.args.epochs))
 
-    def get_trainloader(self):
-        # Dataloader, evaluator, model and optimizer.
-        args = self.args
+    def update_full_batch_with_neg_samples(self):
+        num_neg = self.args.num_neg
 
-        dataset = utils.load_dataset(self.config, args.dataset, args.num_neg)
+        users_pos = self.dataset.train_ratings.row
+        items_pos = self.dataset.train_ratings.col
+        labels_pos = self.dataset.train_ratings.data
 
-        trainloader, trainsampler = self.get_generic_loader(dataset) if args.make_diary else None, None
+        num_pos = len(users_pos)
 
-        val_evaluator = dataset.get_evaluator(is_val=True)
-        test_evaluator = dataset.get_evaluator(is_val=False)
+        users = np.tile(np.array(users_pos, dtype=np.int64), (num_neg + 1))
+        labels = np.hstack([labels_pos, np.zeros((num_pos * num_neg,), dtype=np.float)])
 
-        return trainloader, trainsampler, val_evaluator, test_evaluator, dataset
+        neg_items = [] if num_neg <= 0 else \
+            [self.dataset.find_neg(self.dataset.train_rel_items[usr], self.dataset.num_items, num_neg)
+             for usr in users_pos]
 
-    def get_fake_loader(self, new_data:dict):
-        if "train_data" in new_data and new_data['train_data'].nnz != 0:
-            self.fake_dataset.update_data(new_data)
+        items = np.hstack([np.array(items_pos, dtype=np.int64), np.array(neg_items, dtype=np.int64).reshape(-1)])
 
-        fakeloader, fakesampler = self.get_generic_loader(self.fake_dataset)
+        # full dataset into GPU
+        users = torch.from_numpy(users)
+        items = torch.from_numpy(items)
+        labels = torch.from_numpy(labels)
 
-        return fakeloader, fakesampler
+        return users, items, labels
 
     def load_model(self):
         # Model
         args = self.args
 
-        num_users, num_items = self.dataset.count()
-        dict_config = {'num_users': num_users, 'num_items': num_items, 'num_factors': args.num_factors,
-                       'loss_type': args.loss, 'reg': args.reg, 'device': args.gpu,
-                       'norm_user': args.norm_user, 'norm_item': args.norm_item,
-                       'use_user_bias': args.use_user_bias, 'use_item_bias': args.use_item_bias,
-                       'multiplier': args.multiplier, 'bias': args.bias,
-                       'square_dist': args.square_dist, 'mapping': args.gmf_linear, 'fuse': args.fuse}
+        num_users, num_items = self.dataset.num_users, self.dataset.num_items
 
-        if args.method == 'MF':
-            model = MF(dict_config)
-        elif args.method == 'GMF':
-            model = GMF(dict_config)
-        elif args.method == 'MLP':
-            model = MLP(dict_config)
-        elif args.method == 'NeuMF':
-            model = NeuMF(dict_config)
-        elif args.method == 'LadderGMF':
-            model = LadderGMF(dict_config)
-        elif args.method == 'DoubleGMF':
-            model = DoubleGMF(dict_config)
-        elif args.method == 'SharedNeuMF':
-            model = SharedNeuMF(dict_config)
-        elif args.method == 'PMF':
-            model = PMF(dict_config)
-        elif args.method == 'DMF_A':
-            model = DMF_A(dict_config, norm=args.dist_norm)
-        elif args.method == 'DMF_B':
-            model = DMF_B(dict_config, norm=args.dist_norm)
-        elif args.method == 'DMF_C':
-            model = DMF_C(dict_config, norm=args.dist_norm)
-        elif args.method == 'DMF_D':
-            model = DMF_D(dict_config, norm=args.dist_norm)
-        elif args.method == 'CML':
-            model = CML(dict_config)
-        elif args.item_pop or 'ItemCF' in args.method:
-            return None, None, 0
+        dict_config = {"num_factors": args.num_factors,
+                       "num_users": num_users, "num_items": num_items,
+                       "implicit": args.implicit,
+                       "num_neg": args.num_neg,
+                       "loss_type": args.loss,
+                       "reg": args.reg,
+                       "device": self.device,
+                       "norm_user": args.norm_user, "norm_item": args.norm_item,
+                       "use_user_bias": args.use_user_bias, "use_item_bias": args.use_item_bias,
+                       "multiplier": args.multiplier, "bias": args.bias,
+                       "square_dist": args.square_dist}
+
+        model_class_dict = {
+            "MF": MF,
+            "GMF": GMF,
+            "NeuMF": NeuMF,
+            "CML": CML
+        }
+        if args.method in model_class_dict:
+            model = model_class_dict[args.method](dict_config)
+
         else:
-            raise (Exception('Method {0} not found. Choose the method from '
-                             '[GMF, MLP, NeuMF, LadderGMF, DoubleGMF, SharedNeuMF, PMF, DMF_(A,B_C,D), CML].'.format(
-                    args.method)))
-        model.to(model.device)
+            raise (Exception("Method {0} not found. Choose the method from {1}".format(args.method, model_class_dict.keys())))
+
+        model.to(self.device)
 
         lr = args.lr
         optimizer = optim.Adam(model.parameters(), lr=lr, betas=(0.5, 0.99), weight_decay=args.reg)
-
-        # To continue training. Load model from the same class if needed.
-        if args.path_to_load_embedding != 'default':
-            model.load_embedding_from_file(args.path_to_load_embedding)
-        elif args.path_to_load_model != 'default':
-            optimizer = model.load_model_from_file(args.path_to_load_model, optimizer=optimizer)
-
-        # Fine-tuning. Load pretrained model from the subclass. (Only for NeuMF and DoubleGMF)
-        if args.path_to_subclass_model != ['default', 'default']:
-            model.load_pretrained_model(args.path_to_subclass_model)
-        if args.path_to_subclass_embedding != ['default', 'default']:
-            model.load_pretrained_embedding(args.path_to_subclass_embedding)
-        if args.fix_left:
-            optimizer = model.fix_left(optimizer)
-        if args.fix_right:
-            optimizer = model.fix_right(optimizer)
 
         return model, optimizer, lr
 

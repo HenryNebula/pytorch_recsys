@@ -1,0 +1,8 @@
+{
+  "root_ml1m": "./data/ml-1m",
+  "shuffle": true,
+  "lr_decay": 0.1,
+  "lr_decay_epoch": [1000],
+  "debug_test": false,
+  "debug_epoch": [1]
+}

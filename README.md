@@ -82,4 +82,4 @@ For validation set, the setting and format are the same with test set.
 
 ### Acknowledgement
 
-The implementation of Dataloader and MF-like models is inspired by Shaohui Liu ([B1ueber2y](https://github.com/B1ueber2y))'s implementation of NCF (PyTorch Version). Thanks a lot!
+The implementation of Dataloader and MF-like models is inspired by Shaohui Liu ([B1ueber2y](https://github.com/B1ueber2y))"s implementation of NCF (PyTorch Version). Thanks a lot!
