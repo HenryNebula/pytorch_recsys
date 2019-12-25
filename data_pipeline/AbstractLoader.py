@@ -1,82 +1,110 @@
-import os, sys
-from dataloader.Evaluator import Evaluator
+from numba import jit, prange
+from data_pipeline.Evaluator import Evaluator
 import numpy as np
 import torch.utils.data
-from scipy.sparse import lil_matrix
+from scipy.sparse import coo_matrix
+from random import randint
 
 
 class AbstractLoader(torch.utils.data.Dataset):
-    def __init__(self, root, num_neg):
+    def __init__(self, root, num_neg, implicit=False):
         self.root = root
         self.num_neg = num_neg
+        self.implicit = implicit
 
-        self.train_data: lil_matrix = self.get_train_data()
-        self.get_data_info()
+        self.train_ratings: coo_matrix
+        self.test_ratings: coo_matrix
+        self.train_ratings, self.test_ratings = self.get_ratings()
 
-    def get_train_data(self):
-        '''
+        self.num_users, self.num_items = self.train_ratings.shape
+
+        train_rating_csr = self.train_ratings.tocsr()
+        self.train_rel_items = [train_rating_csr[idx].indices
+                                for idx in range(self.num_users)]
+
+        self.sparse_data_list = list(zip(self.train_ratings.row,
+                                         self.train_ratings.col,
+                                         self.train_ratings.data))
+
+        self.test_candidates = self.get_test_candidates()
+
+        print("-----------------------------------")
+        print("Dataset {} loaded.".format(self.get_dataset_name()))
+        print("num_users: {0}, num_items: {1}".format(self.num_users, self.num_items))
+        print("-----------------------------------")
+
+    def get_dataset_name(self):
+        return "Abstract Loader"
+
+    def get_ratings(self):
+        """
         - Return
-        -- train_data	lil matrix shaped (num_users, num_items)
-        '''
+        -- train_data	csr matrix shaped (num_users, num_items)
+        -- test_data	csr matrix shaped (num_users, num_items)
+        """
         raise NotImplementedError
 
-    def get_test_data(self):
-        '''
+    def get_test_candidates(self):
+        """
         - Return
         -- test_pos	A list of positive samples (u, i)
         -- test_neg	A list of negative sample list (i1, i2, ....., in) corresponding to u.
-        '''
+        """
         raise NotImplementedError
 
-    def get_val_data(self):
-        '''
-        - Return
-        -- val_pos	A list of positive samples (u, i)
-        -- val_neg	A list of negative sample list (i1, i2, ....., in) corresponding to u.
-        '''
-        raise NotImplementedError
-
-    def get_evaluator(self, is_val):
-        if is_val:
-            pos, neg = self.get_val_data()
-        else:
-            pos, neg = self.get_test_data()
-        return Evaluator(pos, neg)
-
-    def get_data_info(self):
-        mat_dok = self.train_data.todok()
-        self.train_list = list(mat_dok.keys())
-        self.num_users = self.train_data.shape[0]
-        self.num_items = self.train_data.shape[1]
-        self.sparsity = 1 - self.train_data.nnz / (self.num_items * self.num_users)
+    def get_evaluator(self):
+        return Evaluator(self.test_ratings, self.test_candidates)
 
     def count(self):
         return self.num_users, self.num_items
- 
+
+    def get_popularity(self):
+        sum_iteractions = np.array(np.sum(self.train_ratings, axis=0)).reshape(-1)
+        arg_sort = np.argsort(-sum_iteractions)
+
+        popularity = np.ones(shape=sum_iteractions.shape) * len(sum_iteractions)
+
+        for rank, arg in enumerate(arg_sort):
+            popularity[arg] = rank
+
+        return popularity
+
+    @staticmethod
+    def explicit_to_implicit(rating_mtx: coo_matrix):
+        rating_mtx.data = np.ones(shape=(rating_mtx.nnz, ), dtype=np.float)
+
+    @staticmethod
+    @jit(nopython=True)
+    def find_neg(user_rel_items, item_range, neg_num):
+        items = []
+        user_rel = set(user_rel_items)
+        for t in range(neg_num):
+            item = randint(0, item_range - 1)
+            while item in user_rel or item in items:
+                item = randint(0, item_range - 1)
+            items.append(item)
+        return items
+
     def __len__(self):
-        return len(self.train_list)
+        return self.train_ratings.nnz
 
     def __getitem__(self, index):
-        users, items, labels = [], [], []
-
         # positive
-        user = self.train_list[index][0]
-        item = self.train_list[index][1]
-        users.append(user)
-        items.append(item)
-        labels.append(1)
+        user, item, label = self.sparse_data_list[index]
 
-        # negative
-        user_ll = self.train_data.rows[user]
+        users = np.ones((self.num_neg + 1, ), dtype=np.int32)
+        labels = np.zeros((self.num_neg + 1, ), dtype=np.float)
+        labels[0] = label
 
-        for t in range(self.num_neg):
-            item = np.random.randint(self.num_items)
-            while item in user_ll:
-                item = np.random.randint(self.num_items)
-            users.append(user)
-            items.append(item)
-            labels.append(0)
+        if self.num_neg > 0:
+            neg_items = self.find_neg(self.train_rel_items[int(user)], self.num_items, self.num_neg)
 
-        users, items, labels = np.array(users), np.array(items), np.array(labels)
+        else:
+            neg_items = []
+
+        neg_items.insert(0, item)
+
+        items = np.array(neg_items, dtype=np.int32)
+
         return users, items, labels
 
