@@ -1,11 +1,11 @@
 import torch
 from torch import nn
-from graph.BaseMF import BaseMF
+from model.BaseMF import BaseMF
 
 
 class LadderGMF(BaseMF):
-    def __init__(self, dict_config, num_layers=3):
-        super(LadderGMF, self).__init__(dict_config, embed=True, activate=True)
+    def __init__(self, model_config, num_layers=3):
+        super(LadderGMF, self).__init__(model_config)
 
         self.num_layers = num_layers
         self.user_ladder = nn.ModuleList()

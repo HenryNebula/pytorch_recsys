@@ -1,12 +1,12 @@
 from torch import nn
-from graph.BaseMF import BaseMF
+from model.BaseMF import BaseMF
 
 
 class GMF(BaseMF):
-    def __init__(self, dict_config):
-        super(GMF, self).__init__(dict_config, embed=True, activate=True)
+    def __init__(self, model_config):
+        super(GMF, self).__init__(model_config)
 
-        self.mapping_flag = dict_config['mapping']
+        self.mapping_flag = model_config["mapping"]
         self.mapping = nn.Linear(1,1)
 
     def get_similarity(self, input):

@@ -1,11 +1,11 @@
 import torch
-from graph.BaseMF import BaseMF
+from model.BaseMF import BaseMF
 from utility import model_utils
 
 
 class MLP(BaseMF):
-    def __init__(self, dict_config):
-        super(MLP, self).__init__(dict_config, embed=True, activate=True)
+    def __init__(self, model_config):
+        super(MLP, self).__init__(model_config)
 
         self.mapping = model_utils.make_fc_layers([32, 16, 8, 1], in_channels=2*self.num_factors)
 

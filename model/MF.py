@@ -1,12 +1,12 @@
-from graph.BaseMF import BaseMF
+from model.BaseMF import BaseMF
 
 
 class MF(BaseMF):
-    def __init__(self, dict_config):
-        super(MF, self).__init__(dict_config, embed=True, activate=False)
+    def __init__(self, model_config):
+        super(MF, self).__init__(model_config)
 
     def get_default_loss_type(self):
-        return 'L2'
+        return "L2"
 
     def get_similarity(self, input):
         f_user, f_item = input[0], input[1]
