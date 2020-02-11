@@ -85,7 +85,7 @@ class BaseMF(nn.Module):
 
         if (not self.implicit) and (self.loss_type not in regression_loss):
             raise ValueError("{} loss can not be used when dealing with explicit ratings; "
-                             "please set implicit to true first")
+                             "please set implicit to true first".format(self.loss_type))
 
         if self.loss_type in ranking_loss and self.num_neg <= 0:
             raise ValueError("Ranking loss {} only works along with negative sampling; "

@@ -14,3 +14,4 @@ config*.json
 
 data/
 test/
+/test/

@@ -5,7 +5,7 @@ import os
 def create_logger(log_fname):
 
     logger = logging.getLogger()
-    logger.setLevel("DEBUG")
+    logger.setLevel("INFO")
     BASIC_FORMAT = "(%(asctime)s)\t%(message)s"
     DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
     formatter = logging.Formatter(BASIC_FORMAT, DATE_FORMAT)

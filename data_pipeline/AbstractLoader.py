@@ -75,14 +75,17 @@ class AbstractLoader(torch.utils.data.Dataset):
 
     @staticmethod
     @jit(nopython=True)
-    def find_neg(user_rel_items, item_range, neg_num):
-        items = []
-        user_rel = set(user_rel_items)
-        for t in range(neg_num):
-            item = randint(0, item_range - 1)
-            while item in user_rel or item in items:
+    def find_neg(user_rel_items, item_range, neg_num, check=True):
+        if not check:
+            items = [randint(0, item_range - 1) for _ in range(neg_num)]
+        else:
+            items = []
+            user_rel = set(user_rel_items)
+            for t in range(neg_num):
                 item = randint(0, item_range - 1)
-            items.append(item)
+                while item in user_rel or item in items:
+                    item = randint(0, item_range - 1)
+                items.append(item)
         return items
 
     def __len__(self):
@@ -92,7 +95,7 @@ class AbstractLoader(torch.utils.data.Dataset):
         # positive
         user, item, label = self.sparse_data_list[index]
 
-        users = np.ones((self.num_neg + 1, ), dtype=np.int32)
+        users = np.ones((self.num_neg + 1, ), dtype=np.int64)
         labels = np.zeros((self.num_neg + 1, ), dtype=np.float)
         labels[0] = label
 
@@ -104,7 +107,7 @@ class AbstractLoader(torch.utils.data.Dataset):
 
         neg_items.insert(0, item)
 
-        items = np.array(neg_items, dtype=np.int32)
+        items = np.array(neg_items, dtype=np.int64)
 
         return users, items, labels
 

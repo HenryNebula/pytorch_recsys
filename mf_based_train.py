@@ -61,30 +61,6 @@ def core_training(pipeline:Pipeline):
                   .format(epoch, loss_ / batch_count, test_loss, ranking_metrics))
 
 
-def init_args(args_):
-    print("Task Name: {}".format(args_.task))
-
-    if args_.task == "default":
-        """used for debugging"""
-        args_.dataset = "ml-1m"
-        args_.implicit = False
-        args_.method = "MF"
-        args_.config = "default_config.json"
-        args_.num_neg = 4
-        args_.batch_size = -1
-        args_.num_factors = 16
-        args_.epochs = 50
-        args_.lr = 0.5
-        args_.reg = 0.0
-        args_.loss = "L2"
-
-    paras = "lr_{}-Reg_{}-Embed_{}".format(args_.lr, args_.reg, args_.num_factors)
-
-    args_.log_name = "{}.log".format(paras)
-    return args_
-
-
 if __name__ == "__main__":
     args = utils.parse_args()
-    args = init_args(args)
     core_training(Pipeline(args))
